@@ -13,6 +13,15 @@ const initialErrors = {
   general: '',
 };
 
+const forgotPasswordInitialState = {
+  email: '',
+};
+
+const forgotPasswordInitialErrors = {
+  email: '',
+  general: '',
+};
+
 function validateIdentifier(value) {
   if (!value) return 'Email or phone is required.';
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -31,6 +40,13 @@ function validatePassword(value) {
   return '';
 }
 
+function validateEmail(value) {
+  if (!value) return 'Email is required.';
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(value)) return 'Invalid email format.';
+  return '';
+}
+
 const errorScenarios = {
   'wrong-password': 'Incorrect password. Forgot password?',
   'not-found': 'Account not found. Please check your email/phone or register.',
@@ -45,6 +61,13 @@ export default function PatientLogin() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [welcome, setWelcome] = useState(false);
+  
+  // Forgot password modal state
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotForm, setForgotForm] = useState(forgotPasswordInitialState);
+  const [forgotErrors, setForgotErrors] = useState(forgotPasswordInitialErrors);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState(false);
 
   function handleChange(e) {
     const { name, value, type, checked } = e.target;
@@ -91,6 +114,67 @@ export default function PatientLogin() {
         }, 1800);
       }
     }, 1500);
+  }
+
+  // Forgot password handlers
+  function handleForgotChange(e) {
+    const { name, value } = e.target;
+    setForgotForm(f => ({ ...f, [name]: value }));
+    setForgotErrors(err => ({ ...err, [name]: '', general: '' }));
+  }
+
+  function handleForgotBlur(e) {
+    const { name, value } = e.target;
+    if (name === 'email') {
+      setForgotErrors(err => ({ ...err, [name]: validateEmail(value) }));
+    }
+  }
+
+  async function handleForgotSubmit(e) {
+    e.preventDefault();
+    const emailError = validateEmail(forgotForm.email);
+    if (emailError) {
+      setForgotErrors(err => ({ ...err, email: emailError }));
+      return;
+    }
+    
+    setForgotLoading(true);
+    setForgotErrors(forgotPasswordInitialErrors);
+    
+    try {
+      // API call for forgot password
+      const response = await fetch('/api/patient/forgot-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: forgotForm.email }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setForgotSuccess(true);
+        setTimeout(() => {
+          setShowForgotModal(false);
+          setForgotForm(forgotPasswordInitialState);
+          setForgotSuccess(false);
+        }, 3000);
+      } else {
+        setForgotErrors(err => ({ ...err, general: data.message || 'Failed to send reset email.' }));
+      }
+    } catch (error) {
+      setForgotErrors(err => ({ ...err, general: 'Network error. Please try again.' }));
+    } finally {
+      setForgotLoading(false);
+    }
+  }
+
+  function closeForgotModal() {
+    setShowForgotModal(false);
+    setForgotForm(forgotPasswordInitialState);
+    setForgotErrors(forgotPasswordInitialErrors);
+    setForgotSuccess(false);
   }
 
   return (
@@ -161,7 +245,7 @@ export default function PatientLogin() {
             className="patient-login-forgot"
             tabIndex={loading ? -1 : 0}
             aria-disabled={loading}
-            onClick={() => alert('Password recovery flow coming soon!')}
+            onClick={() => setShowForgotModal(true)}
             disabled={loading}
           >
             Forgot Password?
@@ -189,6 +273,55 @@ export default function PatientLogin() {
           </div>
         )}
       </form>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="forgot-password-modal">
+          <div className="forgot-password-modal-content">
+            <button className="forgot-password-modal-close" onClick={closeForgotModal}>&times;</button>
+            {!forgotSuccess ? (
+              <>
+                <h3>Forgot Password</h3>
+                <p>Enter your email address and we'll send you a link to reset your password.</p>
+                <form onSubmit={handleForgotSubmit}>
+                  <div className="forgot-password-field">
+                    <label htmlFor="forgot-email">Email Address</label>
+                    <input
+                      id="forgot-email"
+                      name="email"
+                      type="email"
+                      placeholder="Enter your email"
+                      value={forgotForm.email}
+                      onChange={handleForgotChange}
+                      onBlur={handleForgotBlur}
+                      disabled={forgotLoading}
+                      className={forgotErrors.email ? 'error' : ''}
+                      autoComplete="email"
+                    />
+                    {forgotErrors.email && <span className="forgot-password-error">{forgotErrors.email}</span>}
+                  </div>
+                  {forgotErrors.general && <div className="forgot-password-error">{forgotErrors.general}</div>}
+                  <div className="forgot-password-actions">
+                    <button type="button" className="forgot-password-cancel" onClick={closeForgotModal}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="forgot-password-submit" disabled={forgotLoading}>
+                      {forgotLoading ? <span className="forgot-password-spinner"></span> : 'Send Reset Link'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <div className="forgot-password-success">
+                <div className="forgot-password-success-icon">✓</div>
+                <h4>Email Sent!</h4>
+                <p>We've sent a password reset link to your email address.</p>
+                <p>Please check your inbox and follow the instructions to reset your password.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
